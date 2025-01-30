@@ -1,7 +1,7 @@
 import Order from '../models/OrderModel.js';
 import Product from '../models/ProductModel.js';
 import DeletedOrder from '../models/DeletedOrder.js';
-import { sendEmailCreateOrder } from '../services/EmailService.js'; // Sử dụng default import
+import { sendEmailCreateOrder } from '../services/EmailService.js';
 
 const getAllOrder = () => {
     return new Promise(async (resolve, reject) => {
@@ -23,12 +23,12 @@ const createOrder = (newOrder) => {
         const {
             orderItems,
             paymentMethod,
+            deliveryMethod,
             itemsPrice,
             shippingPrice,
             totalPrice,
             fullName,
             address,
-            city,
             phone,
             user,
             isPaid,
@@ -79,10 +79,10 @@ const createOrder = (newOrder) => {
                 shippingAddress: {
                     fullName,
                     address,
-                    city,
                     phone,
                 },
                 paymentMethod,
+                deliveryMethod,
                 itemsPrice,
                 shippingPrice,
                 totalPrice,

@@ -13,9 +13,13 @@ const deletedBorrowSchema = new mongoose.Schema(
                     ref: 'Product',
                     required: true,
                 },
+                borrowDate: { type: Date },
+                returnDate: { type: Date },
+                isReturned: { type: Boolean, default: true },
+                returnedAt: { type: Date },
+                isOverdue: { type: Boolean, default: false },
             },
         ],
-
         user: {
             type: mongoose.Schema.Types.ObjectId,
             ref: 'User',
@@ -23,22 +27,19 @@ const deletedBorrowSchema = new mongoose.Schema(
         },
         borrowAddress: {
             fullName: { type: String, required: true },
-            phone: { type: Number, required: true },
+            phone: { type: String, required: true }, // Sửa thành String
             address: { type: String, required: true },
         },
-        borrowDate: { type: Date, default: Date.now }, // Ngày mượn
-        returnDate: { type: Date, required: true }, // Ngày phải trả
-        isReturned: { type: Boolean, default: false }, // Trạng thái đã trả hay chưa
-        // returnedAt: { type: Date }, // Ngày thực trả
-        isOverdue: { type: Boolean, default: false }, // Trạng thái quá hạn
         totalPrice: { type: Number, required: true },
+        penaltyFee: { type: Number, default: 0 },
         returnedAt: { type: Date, default: Date.now },
+        revenue: { type: Number, required: true },
     },
     {
         timestamps: true,
     },
 );
 
-const DeletedBorrow = mongoose.model('DeletedBorrow ', deletedBorrowSchema);
+const DeletedBorrow = mongoose.model('DeletedBorrow', deletedBorrowSchema);
 
 export default DeletedBorrow;

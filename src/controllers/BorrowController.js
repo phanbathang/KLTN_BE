@@ -13,16 +13,62 @@ const getAllBorrows = async (req, res) => {
     }
 };
 
+// const createBorrow = async (req, res) => {
+//     try {
+//         const {
+//             userId,
+//             borrowItems,
+//             borrowAddress,
+//             borrowDate,
+//             borrowDuration, // Thêm borrowDuration
+//             totalPrice,
+//         } = req.body;
+
+//         // Kiểm tra dữ liệu đầu vào
+//         if (
+//             !userId ||
+//             !borrowItems ||
+//             borrowItems.length === 0 ||
+//             !borrowAddress ||
+//             !borrowAddress.fullName ||
+//             !borrowAddress.phone ||
+//             !borrowAddress.address ||
+//             !borrowDate ||
+//             !borrowDuration ||
+//             !totalPrice
+//         ) {
+//             return res.status(400).json({
+//                 status: 'ERR',
+//                 message:
+//                     'All input fields, including borrow address, are required.',
+//             });
+//         }
+
+//         // Tạo dữ liệu cho bản ghi mượn
+//         const newBorrowData = {
+//             user: userId,
+//             borrowItems,
+//             borrowAddress,
+//             borrowDate,
+//             borrowDuration,
+//             totalPrice,
+//         };
+
+//         // Gọi BorrowService để xử lý logic tạo đơn mượn
+//         const response = await BorrowService.createBorrow(newBorrowData);
+//         return res.status(201).json(response);
+//     } catch (error) {
+//         console.error('Error in createBorrow:', error);
+//         return res.status(500).json({
+//             status: 'ERR',
+//             message: 'Internal Server Error.',
+//         });
+//     }
+// };
+
 const createBorrow = async (req, res) => {
     try {
-        const {
-            userId,
-            borrowItems,
-            borrowAddress,
-            borrowDate,
-            returnDate,
-            totalPrice,
-        } = req.body;
+        const { userId, borrowItems, borrowAddress, totalPrice } = req.body;
 
         // Kiểm tra dữ liệu đầu vào
         if (
@@ -33,14 +79,11 @@ const createBorrow = async (req, res) => {
             !borrowAddress.fullName ||
             !borrowAddress.phone ||
             !borrowAddress.address ||
-            !borrowDate ||
-            !returnDate ||
             !totalPrice
         ) {
             return res.status(400).json({
                 status: 'ERR',
-                message:
-                    'All input fields, including borrow address, are required.',
+                message: 'All input fields are required.',
             });
         }
 
@@ -49,8 +92,6 @@ const createBorrow = async (req, res) => {
             user: userId,
             borrowItems,
             borrowAddress,
-            borrowDate,
-            returnDate,
             totalPrice,
         };
 
@@ -126,6 +167,26 @@ const returnBorrow = async (req, res) => {
     }
 };
 
+const returnBorrowItem = async (req, res) => {
+    try {
+        const { borrowId, itemId } = req.params;
+        if (!borrowId || !itemId) {
+            return res.status(400).json({
+                status: 'ERR',
+                message: 'Both borrowId and itemId are required',
+            });
+        }
+        const response = await BorrowService.returnBorrowItem(borrowId, itemId);
+        return res.status(200).json(response);
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({
+            status: 'ERR',
+            message: 'Internal Server Error.',
+        });
+    }
+};
+
 const getDeletedBorrows = async (req, res) => {
     try {
         const data = await BorrowService.getDeletedBorrows();
@@ -155,6 +216,7 @@ export default {
     getBorrowDetail,
     getAllBorrowDetail,
     returnBorrow,
+    returnBorrowItem,
     getDeletedBorrows,
     deleteCanceledBorrow,
 };

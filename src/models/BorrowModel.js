@@ -13,6 +13,12 @@ const borrowSchema = new mongoose.Schema(
                     ref: 'Product',
                     required: true,
                 },
+                borrowDate: { type: Date, default: Date.now }, // Ngày mượn
+                returnDate: { type: Date, required: true }, // Ngày phải trả
+                borrowDuration: { type: Number, min: 1, max: 30 },
+                isReturned: { type: Boolean, default: false },
+                returnedAt: { type: Date },
+                isOverdue: { type: Boolean, default: false },
             },
         ],
 
@@ -23,15 +29,11 @@ const borrowSchema = new mongoose.Schema(
         },
         borrowAddress: {
             fullName: { type: String, required: true },
-            phone: { type: Number, required: true },
+            phone: { type: String, required: true },
             address: { type: String, required: true },
         },
-        borrowDate: { type: Date, default: Date.now }, // Ngày mượn
-        returnDate: { type: Date, required: true }, // Ngày phải trả
-        isReturned: { type: Boolean, default: false }, // Trạng thái đã trả hay chưa
-        returnedAt: { type: Date }, // Ngày thực trả
-        isOverdue: { type: Boolean, default: false }, // Trạng thái quá hạn
         totalPrice: { type: Number, required: true },
+        isFullyReturned: { type: Boolean, default: false },
     },
     {
         timestamps: true,

@@ -1,11 +1,26 @@
 import Borrow from '../models/BorrowModel.js';
 import Product from '../models/ProductModel.js';
 import DeletedBorrow from '../models/DeletedBorrow.js';
+import { sendEmailCreateBorrow } from '../services/EmailService.js';
+import RuleService from './RuleService.js';
 
 const getAllBorrows = () => {
     return new Promise(async (resolve, reject) => {
         try {
             const allBorrow = await Borrow.find().sort({ createdAt: -1 });
+            const today = new Date();
+            for (let borrow of allBorrow) {
+                let hasChanges = false;
+                for (let item of borrow.borrowItems) {
+                    if (!item.isOverdue && item.returnDate < today) {
+                        item.isOverdue = true;
+                        hasChanges = true;
+                    }
+                }
+                if (hasChanges) {
+                    await borrow.save();
+                }
+            }
             resolve({
                 status: 'OK',
                 message: 'Successful',
@@ -19,30 +34,10 @@ const getAllBorrows = () => {
 
 const createBorrow = async (newBorrow) => {
     try {
-        const {
-            user,
-            borrowItems,
-            borrowDate,
-            returnDate,
-            borrowAddress,
-            totalPrice,
-        } = newBorrow;
+        const { user, borrowItems, borrowAddress, totalPrice, email } =
+            newBorrow;
 
-        const parsedBorrowDate = new Date(borrowDate);
-        const parsedReturnDate = new Date(returnDate);
-
-        // Kiểm tra ngày hợp lệ
-        if (
-            isNaN(parsedBorrowDate.getTime()) ||
-            isNaN(parsedReturnDate.getTime())
-        ) {
-            return {
-                status: 'ERR',
-                message: 'Invalid date format. Please use YYYY-MM-DD format.',
-            };
-        }
-
-        // Kiểm tra dữ liệu đầu vào có đủ không
+        // Kiểm tra dữ liệu đầu vào
         if (
             !user ||
             !borrowItems ||
@@ -51,30 +46,62 @@ const createBorrow = async (newBorrow) => {
             !borrowAddress.fullName ||
             !borrowAddress.phone ||
             !borrowAddress.address ||
-            !parsedBorrowDate ||
-            !parsedReturnDate ||
             !totalPrice
         ) {
             return { status: 'ERR', message: 'All input fields are required.' };
         }
 
-        // Kiểm tra từng sản phẩm trong borrowItems
+        // Kiểm tra từng sản phẩm
         for (let item of borrowItems) {
             if (
                 !item.name ||
                 !item.amount ||
                 !item.image ||
                 !item.price ||
-                !item.product
+                !item.product ||
+                !item.borrowDate ||
+                !item.borrowDuration
             ) {
                 return {
                     status: 'ERR',
                     message:
-                        'Each borrow item must have name, amount, image, price, and product ID.',
+                        'Each borrow item must have name, amount, image, price, product ID, borrowDate, and borrowDuration.',
                 };
             }
 
-            // Cập nhật số lượng sản phẩm trong kho
+            const parsedBorrowDate = new Date(item.borrowDate);
+            if (isNaN(parsedBorrowDate.getTime())) {
+                return {
+                    status: 'ERR',
+                    message:
+                        'Invalid borrow date format for item: ' + item.name,
+                };
+            }
+
+            if (
+                !item.borrowDuration ||
+                item.borrowDuration < 1 ||
+                item.borrowDuration > 30
+            ) {
+                return {
+                    status: 'ERR',
+                    message:
+                        'Borrow duration must be between 1 and 30 days for item: ' +
+                        item.name,
+                };
+            }
+
+            // Tính returnDate và khởi tạo trạng thái
+            const returnDate = new Date(parsedBorrowDate);
+            returnDate.setDate(
+                parsedBorrowDate.getDate() + item.borrowDuration,
+            );
+            item.returnDate = returnDate;
+            item.isReturned = false;
+            item.returnedAt = null;
+            item.isOverdue = false;
+
+            // Cập nhật tồn kho
             const updatedProduct = await Product.findOneAndUpdate(
                 { _id: item.product, countInStock: { $gte: item.amount } },
                 { $inc: { countInStock: -item.amount } },
@@ -89,19 +116,15 @@ const createBorrow = async (newBorrow) => {
             }
         }
 
-        // Tạo bản ghi mượn với đầy đủ trường
+        // Tạo bản ghi mượn
         const createdBorrow = await Borrow.create({
             user,
             borrowItems,
             borrowAddress,
-            borrowDate: parsedBorrowDate,
-            returnDate: parsedReturnDate,
-            isReturned: false, // Mặc định chưa trả sách
-            returnedAt: null,
-            isOverdue: false, // Chưa quá hạn khi mới tạo
             totalPrice,
         });
 
+        await sendEmailCreateBorrow(email, borrowItems);
         return {
             status: 'OK',
             message: 'Borrow record created successfully.',
@@ -123,10 +146,10 @@ const getAllBorrowDetail = (id) => {
                 .populate('borrowItems.product', 'name price')
                 .populate('user', 'name email');
 
-            if (!borrows || borrows.length === 0) {
+            if (borrows === null) {
                 return resolve({
-                    status: 'ERR',
-                    message: 'No borrow records found.',
+                    status: 'OK',
+                    message: 'The borrows is not defined',
                 });
             }
 
@@ -155,6 +178,18 @@ const getBorrowDetail = (id) => {
                 });
             }
 
+            const today = new Date();
+            let hasChanges = false;
+            for (let item of borrow.borrowItems) {
+                if (!item.isOverdue && item.returnDate < today) {
+                    item.isOverdue = true;
+                    hasChanges = true;
+                }
+            }
+            if (hasChanges) {
+                await borrow.save();
+            }
+
             resolve({
                 status: 'OK',
                 message: 'Borrow record found.',
@@ -177,7 +212,34 @@ const returnBorrow = (id) => {
                 });
             }
 
-            // Hoàn trả sách về kho
+            // Lấy phí phạt trễ hạn từ RuleService
+            const penaltyResponse = await RuleService.getLatePenaltyFee();
+            if (penaltyResponse.status !== 'OK') {
+                return resolve({
+                    status: 'ERR',
+                    message: 'Không thể lấy phí phạt trễ hạn',
+                });
+            }
+            const latePenaltyFee = penaltyResponse.data; // Giá trị phí phạt/ngày
+
+            let penaltyFee = 0;
+            const today = new Date();
+            for (let item of borrow.borrowItems) {
+                if (!item.isReturned) {
+                    item.isReturned = true;
+                    item.returnedAt = true;
+                    if (today > item.returnDate) {
+                        const overdueDays = Math.ceil(
+                            (today - item.returnDate) / (1000 * 60 * 60 * 24),
+                        );
+                        penaltyFee += overdueDays * latePenaltyFee; // Sử dụng latePenaltyFee
+                        item.isOverdue = true;
+                    }
+                }
+            }
+
+            const revenue = borrow.totalPrice + penaltyFee;
+
             const promises = borrow.borrowItems.map(async (item) => {
                 return Product.findOneAndUpdate(
                     { _id: item.product },
@@ -188,26 +250,134 @@ const returnBorrow = (id) => {
 
             await Promise.all(promises);
 
-            // Lưu thông tin vào DeletedBorrows
             await DeletedBorrow.create({
                 borrowItems: borrow.borrowItems,
                 user: borrow.user,
                 borrowAddress: borrow.borrowAddress,
-                borrowDate: borrow.borrowDate,
-                returnDate: borrow.returnDate,
-                isReturned: true,
-                returnedAt: new Date(),
-                isOverdue: borrow.isOverdue,
                 totalPrice: borrow.totalPrice,
+                penaltyFee,
+                revenue,
             });
 
-            // Xóa bản ghi mượn khỏi collection "Borrow"
             await Borrow.findByIdAndDelete(id);
 
             resolve({
                 status: 'OK',
                 message: 'Borrow record deleted and saved in history.',
+                penaltyFee,
+                revenue,
             });
+        } catch (error) {
+            reject(error);
+        }
+    });
+};
+
+const returnBorrowItem = (borrowId, itemId) => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const borrow = await Borrow.findById(borrowId);
+            if (!borrow) {
+                return resolve({
+                    status: 'ERR',
+                    message: 'The borrow record is not found.',
+                });
+            }
+
+            const item = borrow.borrowItems.id(itemId);
+            if (!item) {
+                return resolve({
+                    status: 'ERR',
+                    message: 'The borrow item is not found.',
+                });
+            }
+
+            if (item.isReturned) {
+                return resolve({
+                    status: 'ERR',
+                    message: 'This item has already been returned.',
+                });
+            }
+
+            // Lấy phí phạt trễ hạn từ RuleService
+            const penaltyResponse = await RuleService.getLatePenaltyFee();
+            if (penaltyResponse.status !== 'OK') {
+                return resolve({
+                    status: 'ERR',
+                    message: 'Không thể lấy phí phạt trễ hạn',
+                });
+            }
+            const latePenaltyFee = penaltyResponse.data; // Giá trị phí phạt/ngày
+
+            const today = new Date();
+            item.isReturned = true;
+            item.returnedAt = today;
+
+            let penaltyFee = 0;
+            if (today > item.returnDate) {
+                const overdueDays = Math.ceil(
+                    (today - item.returnDate) / (1000 * 60 * 60 * 24),
+                );
+                penaltyFee = overdueDays * latePenaltyFee; // Sử dụng latePenaltyFee
+                item.isOverdue = true;
+            }
+
+            await Product.findOneAndUpdate(
+                { _id: item.product },
+                { $inc: { countInStock: item.amount } },
+                { new: true },
+            );
+
+            const allReturned = borrow.borrowItems.every(
+                (item) => item.isReturned,
+            );
+            if (allReturned) {
+                borrow.isFullyReturned = true;
+
+                const totalPenaltyFee = borrow.borrowItems.reduce(
+                    (total, item) => {
+                        if (
+                            item.isOverdue &&
+                            item.returnedAt > item.returnDate
+                        ) {
+                            const overdueDays = Math.ceil(
+                                (item.returnedAt - item.returnDate) /
+                                    (1000 * 60 * 60 * 24),
+                            );
+                            return total + overdueDays * latePenaltyFee; // Sử dụng latePenaltyFee
+                        }
+                        return total;
+                    },
+                    0,
+                );
+
+                const revenue = borrow.totalPrice + totalPenaltyFee;
+
+                await DeletedBorrow.create({
+                    borrowItems: borrow.borrowItems,
+                    user: borrow.user,
+                    borrowAddress: borrow.borrowAddress,
+                    totalPrice: borrow.totalPrice,
+                    penaltyFee: totalPenaltyFee,
+                    revenue,
+                });
+
+                await Borrow.findByIdAndDelete(borrowId);
+                return resolve({
+                    status: 'OK',
+                    message:
+                        'All items returned, borrow record deleted and saved in history.',
+                    penaltyFee,
+                    revenue,
+                });
+            } else {
+                await borrow.save();
+                return resolve({
+                    status: 'OK',
+                    message: 'Item returned successfully.',
+                    penaltyFee,
+                });
+            }
         } catch (error) {
             reject(error);
         }
@@ -262,6 +432,7 @@ export default {
     getBorrowDetail,
     getAllBorrowDetail,
     returnBorrow,
+    returnBorrowItem,
     getDeletedBorrows,
     deleteCanceledBorrow,
 };

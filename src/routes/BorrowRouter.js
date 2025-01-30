@@ -8,24 +8,14 @@ import {
 const router = express.Router();
 
 router.get('/getAllBorrows', BorrowController.getAllBorrows);
-router.post('/createBorrow', authUserMiddleware, BorrowController.createBorrow);
-router.get(
-    '/getBorrowDetail/:id',
-    authUserMiddleware,
-    BorrowController.getBorrowDetail,
-);
-router.get(
-    '/getAllBorrowDetail/:id',
-    authUserMiddleware,
-    BorrowController.getAllBorrowDetail,
-);
-
-router.delete(
-    '/returnBorrow/:id',
-    authUserMiddleware,
-    BorrowController.returnBorrow,
-);
-
+router.post('/createBorrow', BorrowController.createBorrow);
+router.get('/getBorrowDetail/:id', BorrowController.getBorrowDetail);
+router.get('/getAllBorrowDetail/:id', BorrowController.getAllBorrowDetail);
+router.delete('/returnBorrow/:id', BorrowController.returnBorrow);
+router.put(
+    '/returnBorrowItem/:borrowId/:itemId',
+    BorrowController.returnBorrowItem,
+); // Endpoint mới
 router.get('/getDeletedBorrows', BorrowController.getDeletedBorrows);
 router.delete(
     '/deleteCanceledBorrow/:id',

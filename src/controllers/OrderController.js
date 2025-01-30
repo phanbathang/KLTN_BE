@@ -17,23 +17,23 @@ const createOrder = async (req, res) => {
     try {
         const {
             paymentMethod,
+            deliveryMethod,
             itemsPrice,
             shippingPrice,
             totalPrice,
             fullName,
             address,
-            city,
             phone,
         } = req.body;
 
         if (
             !paymentMethod ||
+            !deliveryMethod ||
             !itemsPrice ||
             !shippingPrice ||
             !totalPrice ||
             !fullName ||
             !address ||
-            !city ||
             !phone
         ) {
             return res.status(200).json({
