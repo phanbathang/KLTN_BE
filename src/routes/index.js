@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import AdminPage from '../pages/AdminPage/AdminPage';
 import DetailOrderPage from '../pages/DetailOrderPage/DetailOrderPage';
 import HomePage from '../pages/HomePage/HomePage';
@@ -98,3 +99,17 @@ export const routes = [
         page: NotFoundPage,
     },
 ];
+=======
+import UserRouter from "./UserRouter.js";
+import ProductRouter from "./ProductRouter.js";
+import OrderRouter from "./OrderRouter.js";
+import PaymentRouter from "./PaymentRouter.js";
+const routes = (app) => {
+  app.use("/api/user", UserRouter);
+  app.use("/api/product", ProductRouter);
+  app.use("/api/order", OrderRouter);
+  app.use("/api/payment", PaymentRouter);
+};
+
+export default routes;
+>>>>>>> f8bcc43 (backend)
